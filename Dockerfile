@@ -18,6 +18,7 @@ WORKDIR /root/
 COPY --from=builder /go-cheers-app .
 
 COPY --from=builder /app/templates ./templates
+COPY --from=builder /app/static ./static
 
 EXPOSE 8080
 
