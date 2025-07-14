@@ -1,0 +1,182 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Go Cheers App</title>
+    <style>
+      body {
+          font-family: sans-serif;
+          display: flex;
+          justify-content: center;
+          align-items: center;
+          min-height: 100vh;
+          margin: 0;
+          transition: background-color 0.5s ease; /* Smooth background transition */
+          background-color: lightblue; /* Default color */
+          overflow: hidden; /* Prevent scrollbars from animation */
+          position: relative; /* For absolute positioning of animation */
+      }
+      {{if .CheersActive}} /* Go template syntax for conditional CSS */
+      body { background-color: #4CAF50; /* Green */ }
+      {{end}}
+
+      .container {
+          text-align: center;
+          padding: 20px;
+          border-radius: 8px;
+          background-color: rgba(255, 255, 255, 0.8);
+          box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+          z-index: 10; /* Ensure container is above animation */
+      }
+      h1 { color: #333; }
+      p { color: #555; }
+
+      /* --- Animation Styles --- */
+      #cheers-animation {
+          position: absolute;
+          top: 50%;
+          left: 50%;
+          transform: translate(-50%, -50%);
+          font-size: 5em; /* Large text */
+          font-weight: bold;
+          color: gold; /* Gold color for cheers */
+          text-shadow: 2px 2px 4px rgba(0,0,0,0.5);
+          opacity: 0; /* Hidden by default */
+          pointer-events: none; /* Allows clicks to pass through */
+          z-index: 100; /* On top of everything */
+      }
+
+      /* Keyframe animation for popping in and fading out */
+      @keyframes popAndFade {
+          0% {
+              opacity: 0;
+              transform: translate(-50%, -50%) scale(0.5) rotate(-10deg);
+          }
+          20% {
+              opacity: 1;
+              transform: translate(-50%, -50%) scale(1.2) rotate(5deg);
+          }
+          50% {
+              opacity: 1;
+              transform: translate(-50%, -50%) scale(1) rotate(0deg);
+          }
+          80% {
+              opacity: 0.5;
+              transform: translate(-50%, -50%) scale(1.1) rotate(0deg);
+          }
+          100% {
+              opacity: 0;
+              transform: translate(-50%, -50%) scale(1.3) rotate(10deg);
+          }
+      }
+
+      /* Class to trigger the animation */
+      .animate {
+          animation: popAndFade 1.5s ease-out forwards; /* 1.5 seconds duration */
+      }
+    </style>
+  </head>
+  <body>
+    <div class="container">
+      <h1>Welcome to the Go Cheers App!</h1>
+      <p>This is the main page.</p>
+      {{if .CheersActive}}
+      <p><strong>Cheers activated! The background is green!</strong></p>
+      {{else}}
+      <p>
+        This page will turn green and show an animation and play a sound when
+        /cheers is called externally.
+      </p>
+      <p>
+        <strong>Important:</strong> Click anywhere on this page to allow sound
+        playback in most browsers!
+      </p>
+      {{end}}
+    </div>
+
+    <div id="cheers-animation">🎉 CHEERS! 🎉</div>
+
+    <audio id="cheer-sound" src="/static/cheer.mp3" preload="auto"></audio>
+
+    <script>
+      const eventSource = new EventSource("/events");
+      const animationElement = document.getElementById("cheers-animation");
+      const cheerSound = document.getElementById("cheer-sound");
+
+      // --- Autoplay Policy Workaround ---
+      // Most browsers require a user interaction before allowing audio to play.
+      // We'll try to "unlock" audio playback on the first click.
+      let audioUnlocked = false;
+      document.body.addEventListener(
+        "click",
+        () => {
+          if (!audioUnlocked) {
+            // Try to play a very short, silent sound (or the actual sound)
+            // This attempt to play (even if it fails) can unlock audio.
+            // It's often recommended to play a very short, truly silent audio file here.
+            cheerSound.volume = 0; // Temporarily mute
+            cheerSound
+              .play()
+              .then(() => {
+                cheerSound.pause();
+                cheerSound.currentTime = 0;
+                cheerSound.volume = 1; // Restore volume
+                audioUnlocked = true;
+                console.log("Audio playback unlocked!");
+              })
+              .catch((e) => {
+                console.warn(
+                  "Could not unlock audio on first click (might already be unlocked or blocked):",
+                  e
+                );
+              });
+          }
+        },
+        { once: true }
+      ); // Only trigger this listener once
+
+      eventSource.onopen = function (e) {
+        console.log("SSE connection opened.");
+      };
+
+      eventSource.onerror = function (e) {
+        console.error("SSE Error:", e);
+        // Optionally, try to reconnect after a delay
+        // setTimeout(() => eventSource = new EventSource('/events'), 3000);
+      };
+
+      // Listen for the custom 'cheers' event
+      eventSource.addEventListener("cheers", function (event) {
+        console.log("Received cheers event!", event.data);
+
+        // Trigger animation
+        if (!animationElement.classList.contains("animate")) {
+          animationElement.classList.add("animate");
+          animationElement.addEventListener(
+            "animationend",
+            () => {
+              animationElement.classList.remove("animate");
+            },
+            { once: true }
+          );
+        }
+
+        // Play sound
+        if (audioUnlocked) {
+          // Only attempt to play if we believe audio is unlocked
+          cheerSound.currentTime = 0; // Rewind to start in case it played recently
+          cheerSound.play().catch((e) => {
+            console.error("Error playing cheer sound:", e);
+            // This catch block will often fire if audio wasn't unlocked
+          });
+        } else {
+          console.warn(
+            "Audio not unlocked. Please click on the page to enable sound."
+          );
+          // You might want to temporarily show a "Click to enable sound" message
+        }
+      });
+    </script>
+  </body>
+</html>
